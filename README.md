@@ -89,5 +89,5 @@ The format of the URL is the same as when you access it via the web.  For exampl
 For example:
 
 ```
-python stars_analytics.py stars-map
+python stars_analytics.py stars-geo-map
 ```

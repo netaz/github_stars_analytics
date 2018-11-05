@@ -9,52 +9,55 @@ from datetime import datetime
 import requests
 
 
-def query_github(github_user, github_pw, git_repo_url, fname="star_gazers.csv"):
+def query_github(github_user, github_pw, git_repo_url_base, fname="star_gazers.csv"):
     headers = {'Accept': 'application/vnd.github.v3.star+json'}
     recs_per_page = 50
     page = 1
     cnt_stars = 0
+    git_repo_url_base = git_repo_url_base.replace("github.com", "api.github.com/repos")
     with open(fname, "w") as file:
         csv_file = csv.writer(file)
-        # https://github.com/NervanaSystems/distiller
-        # "https://api.github.com/repos/NervanaSystems/distiller/stargazers?page={}&per_page={}"
-        git_repo_url = git_repo_url.replace("github.com", "api.github.com/repos")
-        git_repo_url += "/stargazers?page={}&per_page={}"
-        r = requests.get(git_repo_url.format(page, recs_per_page),
-                         auth=(github_user, github_pw),
-                         headers=headers)
-        if not r.ok:
-            print("Done or Error")
-            return
-        stars_records = json.loads(r.text or r.content)
-        nstars = len(stars_records)
-        for star in range(nstars):
-            print("-" * 50 + str(cnt_stars+star) + "-" * 50)
-            print(stars_records[star])
-            user = stars_records[star]['user']
-            login = user['login']
-            starred_at = stars_records[star]['starred_at']
-            starred = datetime.strptime(starred_at, '%Y-%m-%dT%H:%M:%SZ')
-            print(login, starred.year, starred.day, starred.month)
-
-            r = requests.get("https://api.github.com/users/" + login,
+        while True:
+            git_repo_url = git_repo_url_base + "/stargazers?page={}&per_page={}"
+            r = requests.get(git_repo_url.format(page, recs_per_page),
                              auth=(github_user, github_pw),
                              headers=headers)
             if not r.ok:
-                raise ValueError("GET https://api.github.com/users/ failed")
-            user_desc = json.loads(r.text or r.content)
-            print(user_desc['login'], user_desc['id'], user_desc['company'],
-                  user_desc['name'], user_desc['location'], user_desc['bio'], starred_at)
-            csv_file.writerow([user_desc['login'], user_desc['id'], user_desc['company'],
-                               user_desc['name'], user_desc['location'], user_desc['bio'], starred_at])
-            file.flush()
-            os.fsync(file.fileno())
-        page += 1
-        cnt_stars += nstars
+                print("Done or Error")
+                break
+            stars_records = json.loads(r.text or r.content)
+            nstars = len(stars_records)
+            if nstars <= 0:
+                print("Done")
+                break
+            for star in range(nstars):
+                print("-" * 50 + str(cnt_stars+star) + "-" * 50)
+                print(stars_records[star])
+                user = stars_records[star]['user']
+                login = user['login']
+                starred_at = stars_records[star]['starred_at']
+                starred = datetime.strptime(starred_at, '%Y-%m-%dT%H:%M:%SZ')
+                print(login, starred.year, starred.day, starred.month)
+
+                r = requests.get("https://api.github.com/users/" + login,
+                                 auth=(github_user, github_pw),
+                                 headers=headers)
+                if not r.ok:
+                    raise ValueError("GET https://api.github.com/users/ failed")
+                user_desc = json.loads(r.text or r.content)
+                for k,v in user_desc.items():
+                    if isinstance(v, str):
+                        user_desc[k] = v.encode('utf-8')
+                print(user_desc['login'], user_desc['id'], user_desc['company'],
+                      user_desc['name'], user_desc['location'], user_desc['bio'], starred_at)
+                csv_file.writerow([user_desc['login'], user_desc['id'], user_desc['company'],
+                                   user_desc['name'], user_desc['location'], user_desc['bio'], starred_at])
+                file.flush()
+                os.fsync(file.fileno())
+            page += 1
+            cnt_stars += nstars
 
     print("Total: ", cnt_stars)
-    print(page)
-    print(r.text)
 
 
 def get_countries_metadata(fname="countries-readable.json"):
@@ -210,9 +213,9 @@ DEBUG_COUNTRY = None
 #DEBUG_COUNTRY = "brazil"
 
 
-def read_starring_history_db(country_city_pairs, country_details, fname="star_gazers.csv"):
+def read_starring_history_db(country_city_pairs, country_details, fcache):
     countries_stats = {}
-    with open(fname) as csv_file:
+    with open(fcache) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=',')
         record_count = 0
         for record in csv_reader:
@@ -236,10 +239,10 @@ def read_starring_history_db(country_city_pairs, country_details, fname="star_ga
         return countries_stats, record_count
 
 
-def cached_query_results_summary():
+def cached_query_results_summary(fcache):
     country_details = get_countries_metadata()
     country_city_pairs = read_cities_db()
-    countries_stats, record_count = read_starring_history_db(country_city_pairs, country_details)
+    countries_stats, record_count = read_starring_history_db(country_city_pairs, country_details, fcache)
     print("\nSummary:")
     print("Total: ", record_count)
     total_matches = 0
@@ -256,8 +259,8 @@ def cached_query_results_summary():
     return countries_list, record_count, total_matches
 
 
-def cached_query_results_tbl():
-    countries_list, record_count, total_matches = cached_query_results_summary()
+def cached_query_results_tbl(fcache):
+    countries_list, record_count, total_matches = cached_query_results_summary(fcache)
     df = pd.DataFrame(columns=['Country', 'Instances', '%', '% extrapolated'])
     for country_stats in countries_list:
         country = country_stats[0]
@@ -269,13 +272,13 @@ def cached_query_results_tbl():
     return df
 
 
-def list_stars_per_country():
-    df = cached_query_results_tbl()
+def list_stars_per_country(fcache):
+    df = cached_query_results_tbl(fcache)
     t = tabulate(df, headers='keys', tablefmt='psql', floatfmt=".5f")
     print(t)
 
 
-def create_stars_map(html_name='stars_map.html'):
+def create_stars_map(fcache, html_name='stars_map.html'):
     # Source https://github.com/albertyw/avenews/blob/master/old/data/average-latitude-longitude-countries.csv
     geo = {}
     fname = "average-latitude-longitude-countries.csv"
@@ -290,13 +293,16 @@ def create_stars_map(html_name='stars_map.html'):
                 country = "russia"
             if country == "moldova, republic of":
                 country = "moldova"
+            if country == "iran, islamic republic of":
+                country = "iran"
             if country == "canada":
                 # I don't like the coordinates chosen for Canada
                 geo[country] = (float(record[2])-4, float(record[3])-2)
                 continue
             geo[country] = (float(record[2]), float(record[3]))
-
-    countries_list, record_count, total_matches = cached_query_results_summary()
+    # Add missing record for Ivory Coast
+    geo["ivory coast"] = (8, 6)
+    countries_list, record_count, total_matches = cached_query_results_summary(fcache)
 
     # Make an empty map
     m = folium.Map(location=[20, 0], tiles="Mapbox Bright", zoom_start=2)
@@ -326,16 +332,18 @@ def parse_starred_at_date(record, starring_log):
     starring_log[date] = starring_log.setdefault(date, 0) + 1
 
 
-def print_monthly_history(fname="star_gazers.csv"):
+def print_monthly_history(fcache):
+    """Monthly trending stars data"""
     starring_log = {}
-    with open(fname) as csv_file:
+    with open(fcache) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=',')
         for record in csv_reader:
             parse_starred_at_date(record, starring_log)
 
     by_month = {}
     for date, cnt in starring_log.items():
-        by_month[date[1]] = by_month.setdefault(date[1], 0) + cnt
+        key = str(date[1]) + "/" + str(date[0])
+        by_month[key] = by_month.setdefault(key, 0) + cnt
     total = 0
     df = pd.DataFrame(columns=['Month', 'New Stars', 'Cumulative Stars'])
     for month, cnt in by_month.items():
@@ -352,11 +360,11 @@ def parse_starred_at_day_of_week(record, starring_log):
     starring_log[day_of_week] = starring_log.setdefault(day_of_week, 0) + 1
 
 
-def print_day_of_week_history(fname="star_gazers.csv"):
+def print_day_of_week_history(fcache):
     """Print the number of stars per each day of the week"""
     daily_log = {}
     day_of_week_log = {}
-    with open(fname) as csv_file:
+    with open(fcache) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=',')
         for record in csv_reader:
             parse_starred_at_day_of_week(record, day_of_week_log)
@@ -378,21 +386,23 @@ def print_day_of_week_history(fname="star_gazers.csv"):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('command',
-                        choices=["query-github", "stars-map", "country-list", "monthly", "day-of-week"],
+                        choices=["query-github", "stars-geo-map", "stars-geo-tbl", "monthly", "day-of-week"],
                         help='path to dataset')
     parser.add_argument("-u", "--user", dest="git_user", help="git user name")
     parser.add_argument("-p", "--password", dest="git_pw", help="git user password")
     parser.add_argument("-r", "--repo",
                         dest="git_repo",
                         help="git repo URL (e.g. https://github.com/NervanaSystems/distiller)")
+    parser.add_argument("-c", "--cache-file", dest="cache_file", default="star_gazers.csv",
+                        help="path to the file caching the results of querying github")
     args = parser.parse_args()
     if args.command == "query-github":
         query_github(args.git_user, args.git_pw, args.git_repo)
-    if args.command == "country-list":
-        list_stars_per_country()
-    if args.command == "stars-map":
-        create_stars_map()
+    if args.command == "stars-geo-tbl":
+        list_stars_per_country(args.cache_file)
+    if args.command == "stars-geo-map":
+        create_stars_map(args.cache_file)
     if args.command == "monthly":
-        print_monthly_history()
+        print_monthly_history(args.cache_file)
     if args.command == "day-of-week":
-        print_day_of_week_history()
+        print_day_of_week_history(args.cache_file)
