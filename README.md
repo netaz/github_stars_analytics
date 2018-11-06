@@ -86,8 +86,14 @@ python stars_analytics.py query-github --user=<YOUR-GITHUB-USERNAME> --password=
 The format of the URL is the same as when you access it via the web.  For example: https://github.com/NervanaSystems/distiller
 
 3. Use the cached github star-gazers data file, to create analytics and visualizations.
-For example:
+For example, to create the diagram above:
 
 ```
 python stars_analytics.py stars-geo-map
 ```
+
+To create a chart of the daily stars for the entire period:
+```
+python3 stars_analytics.py daily --cache-file=distiller_star_gazers.csv --format=plot
+```
+<center> <img src="imgs/daily_stars.png"></center>

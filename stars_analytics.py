@@ -5,8 +5,11 @@ from argparse import ArgumentParser
 from tabulate import tabulate
 import folium
 import pandas as pd
-from datetime import datetime
+import datetime
 import requests
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
 
 def query_github(github_user, github_pw, git_repo_url_base, fname="star_gazers.csv"):
@@ -259,7 +262,7 @@ def cached_query_results_summary(fcache):
     return countries_list, record_count, total_matches
 
 
-def cached_query_results_tbl(fcache):
+def cached_query_results_df(fcache):
     countries_list, record_count, total_matches = cached_query_results_summary(fcache)
     df = pd.DataFrame(columns=['Country', 'Instances', '%', '% extrapolated'])
     for country_stats in countries_list:
@@ -273,7 +276,7 @@ def cached_query_results_tbl(fcache):
 
 
 def list_stars_per_country(fcache):
-    df = cached_query_results_tbl(fcache)
+    df = cached_query_results_df(fcache)
     t = tabulate(df, headers='keys', tablefmt='psql', floatfmt=".5f")
     print(t)
 
@@ -325,68 +328,149 @@ def create_stars_map(fcache, html_name='stars_map.html'):
     print("Created HTML file {}".format(html_name))
 
 
-def parse_starred_at_date(record, starring_log):
-    starred_at = record[6]
-    starred = datetime.strptime(starred_at, '%Y-%m-%dT%H:%M:%SZ')
-    date = (starred.year, starred.month, starred.day)
-    starring_log[date] = starring_log.setdefault(date, 0) + 1
+def add_star_for_date(record, starring_log):
+    """Add a star to the stars-count of the date of the specified log record.
+
+    Convert from string, to datetime.datetime to datetime.date.
+    """
+    starred_at_str = record[6]
+    starred_at_datetime = datetime.datetime.strptime(starred_at_str, '%Y-%m-%dT%H:%M:%SZ')
+    starred_at_date = datetime.date(starred_at_datetime.year,
+                                    starred_at_datetime.month,
+                                    starred_at_datetime.day)
+    starring_log[starred_at_date] = starring_log.setdefault(starred_at_date, 0) + 1
 
 
-def print_monthly_history(fcache):
+def group_by_date_df(fcache, group_type):
     """Monthly trending stars data"""
+    assert group_type in ["monthly", "daily"]
+
     starring_log = {}
     with open(fcache) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=',')
         for record in csv_reader:
-            parse_starred_at_date(record, starring_log)
+            add_star_for_date(record, starring_log)
 
-    by_month = {}
+    group = {}
     for date, cnt in starring_log.items():
-        key = str(date[1]) + "/" + str(date[0])
-        by_month[key] = by_month.setdefault(key, 0) + cnt
+        if group_type == "monthly":
+            key = str(date.month) + "/" + str(date.year)
+        elif group_type == "daily":
+            key = date
+        group[key] = group.setdefault(key, 0) + cnt
     total = 0
-    df = pd.DataFrame(columns=['Month', 'New Stars', 'Cumulative Stars'])
-    for month, cnt in by_month.items():
+    if group_type == "monthly":
+        df = pd.DataFrame(columns=['Month', 'New Stars', 'Cumulative Stars'])
+    else:
+        df = pd.DataFrame(columns=['Date', 'New Stars', 'Cumulative Stars'])
+    for month, cnt in group.items():
         total += cnt
         df.loc[len(df.index)] = ([month, cnt, total])
+    return df
+
+
+def print_history(fcache, group_type):
+    """Monthly trending stars data"""
+    df = group_by_date_df(fcache, group_type)
     t = tabulate(df, headers='keys', tablefmt='psql', floatfmt=".5f")
     print(t)
 
 
-def parse_starred_at_day_of_week(record, starring_log):
+def plot_history(fcache, group_type):
+    """Monthly trending stars data"""
+    df = group_by_date_df(fcache, group_type)
+    if group_type == "monthly":
+        plt.plot(df['Month'], df['New Stars'], marker='o', markerfacecolor='blue', markersize=8, color='skyblue', linewidth=3)
+    else:
+        plt.plot(df['Date'], df['New Stars'], marker='o', markerfacecolor='blue', markersize=8, color='skyblue',
+                 linewidth=3)
+    #plt.title('New stars activity for ' + start_of_month.strftime("%B/%Y"))
+    plt.xticks(rotation=90)
+    plt.ylabel('Stars');
+    plt.show()
+
+
+def daily_history_df(fcache, desired_month, desired_year):
+    """Daily trending stars data"""
+    starring_log = {}
+    with open(fcache) as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter=',')
+        for record in csv_reader:
+            add_star_for_date(record, starring_log)
+
+    daily = {}
+    total = 0
+    start_of_month = datetime.date(desired_year, desired_month, 1)
+    for date, cnt in starring_log.items():
+        if date < start_of_month:
+            total += cnt
+        if date.month == desired_month:
+            key = str(date.day) + "/" + str(date.month)
+            daily[key] = daily.setdefault(key, 0) + cnt
+
+    df = pd.DataFrame(columns=['Date', 'New Stars', 'Cumulative Stars'])
+    for month, cnt in daily.items():
+        total += cnt
+        df.loc[len(df.index)] = ([month, cnt, total])
+    return df
+
+
+def print_daily_history(fcache, desired_month=9, desired_year=2018):
+    df = daily_history_df(fcache, desired_month, desired_year)
+    t = tabulate(df, headers='keys', tablefmt='psql', floatfmt=".5f")
+    print(t)
+
+
+def plot_daily_history(fcache, desired_month=6, desired_year=2018):
+    df = daily_history_df(fcache, desired_month, desired_year)
+    plt.plot(df['Date'], df['New Stars'], marker='o', markerfacecolor='blue', markersize=8, color='skyblue', linewidth=3)
+    start_of_month = datetime.date(desired_year, desired_month, 1)
+    plt.title('New stars activity for ' + start_of_month.strftime("%B/%Y"))
+    plt.xticks(rotation=90)
+    plt.ylabel('Stars');
+    plt.show()
+
+
+def add_star_for_day_of_week(record, starring_log):
     starred_at = record[6]
-    starred = datetime.strptime(starred_at, '%Y-%m-%dT%H:%M:%SZ')
+    starred = datetime.datetime.strptime(starred_at, '%Y-%m-%dT%H:%M:%SZ')
     day_of_week = starred.weekday()
     starring_log[day_of_week] = starring_log.setdefault(day_of_week, 0) + 1
 
 
-def print_day_of_week_history(fcache):
-    """Print the number of stars per each day of the week"""
-    daily_log = {}
-    day_of_week_log = {}
-    with open(fcache) as csv_file:
-        csv_reader = csv.reader(csv_file, delimiter=',')
-        for record in csv_reader:
-            parse_starred_at_day_of_week(record, day_of_week_log)
-            parse_starred_at_date(record, daily_log)
-
-    # Remove outliers.
-    # Certain events, like an announcement over social media, can cause a daily peak that is an outlier and
-    # not indicative of the steady-state star-gazers behavior.  We can remove these events, to get a "cleaner"
-    # view of the gazers behavior.  You might have to look at the data and experiment.
-    # In this case, I only remove the highest single-day starring event.
-    daily_log = sorted(daily_log.items(), key=lambda kv: kv[1], reverse=True)
-    outlier_date = daily_log[0][0]
-    outlier_val = daily_log[0][1]
-    outlier_date = datetime(*outlier_date)
-    day_of_week_log[outlier_date.weekday()] -= outlier_val
-    print(day_of_week_log)
+# def print_day_of_week_history(fcache):
+#     """Print the number of stars per each day of the week"""
+#     daily_log = {}
+#     day_of_week_log = {}
+#     with open(fcache) as csv_file:
+#         csv_reader = csv.reader(csv_file, delimiter=',')
+#         for record in csv_reader:
+#             add_star_for_day_of_week(record, day_of_week_log)
+#             add_star_for_date(record, daily_log)
+#
+#     # Remove outliers.
+#     # Certain events, like an announcement over social media, can cause a daily peak that is an outlier and
+#     # not indicative of the steady-state star-gazers behavior.  We can remove these events, to get a "cleaner"
+#     # view of the gazers behavior.  You might have to look at the data and experiment.
+#     # In this case, I only remove the highest single-day starring event.
+#     daily_log = sorted(daily_log.items(), key=lambda kv: kv[1], reverse=True)
+#     outlier_date = daily_log[0][0]
+#     outlier_val = daily_log[0][1]
+#     outlier_date = datetime.datetime(outlier_date)
+#     day_of_week_log[outlier_date.weekday()] -= outlier_val
+#     print(day_of_week_log)
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('command',
-                        choices=["query-github", "stars-geo-map", "stars-geo-tbl", "monthly", "day-of-week"],
+                        choices=["query-github",
+                                 "stars-geo-map",
+                                 "stars-geo-tbl",
+                                 "monthly",
+                                 "daily",
+                                 #"day-of-week",
+                                 "detailed-month"],
                         help='path to dataset')
     parser.add_argument("-u", "--user", dest="git_user", help="git user name")
     parser.add_argument("-p", "--password", dest="git_pw", help="git user password")
@@ -395,6 +479,11 @@ if __name__ == "__main__":
                         help="git repo URL (e.g. https://github.com/NervanaSystems/distiller)")
     parser.add_argument("-c", "--cache-file", dest="cache_file", default="star_gazers.csv",
                         help="path to the file caching the results of querying github")
+    parser.add_argument("-f", "--format",
+                        choices=["plot","console"],
+                        default="console",
+                        dest="output_format",
+                        help="output format: plot|console")
     args = parser.parse_args()
     if args.command == "query-github":
         query_github(args.git_user, args.git_pw, args.git_repo)
@@ -402,7 +491,15 @@ if __name__ == "__main__":
         list_stars_per_country(args.cache_file)
     if args.command == "stars-geo-map":
         create_stars_map(args.cache_file)
-    if args.command == "monthly":
-        print_monthly_history(args.cache_file)
-    if args.command == "day-of-week":
-        print_day_of_week_history(args.cache_file)
+    if args.command == "monthly" or args.command == "daily":
+        if args.output_format == "plot":
+            plot_history(args.cache_file, group_type=args.command)
+        else:
+            print_history(args.cache_file, group_type=args.command)
+    if args.command == "detailed-month":
+        if args.output_format == "plot":
+            plot_daily_history(args.cache_file)
+        else:
+            print_daily_history(args.cache_file)
+    # if args.command == "day-of-week":
+    #     print_day_of_week_history(args.cache_file)
