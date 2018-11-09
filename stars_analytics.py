@@ -276,10 +276,21 @@ def cached_query_results_df(fcache):
     return df
 
 
-def list_stars_per_country(fcache):
+def print_stars_per_country(fcache):
     df = cached_query_results_df(fcache)
     t = tabulate(df, headers='keys', tablefmt='psql', floatfmt=".5f")
     print(t)
+
+
+def plot_stars_per_country(fcache):
+    df = cached_query_results_df(fcache)
+    plt.figure(figsize=(20,10))
+    #df['% extrapolated'].plot(kind='bar');
+    plt.bar(df['Country'], df['% extrapolated'], width = 1/1.5)
+    #plt.title('New stars activity for ' + start_of_month.strftime("%B/%Y"))
+    plt.xticks(rotation=90)
+    plt.ylabel('% Stars');
+    plt.show()
 
 
 def create_stars_map(fcache, html_name='stars_map.html'):
@@ -497,7 +508,10 @@ if __name__ == "__main__":
     if args.command == "query-github":
         query_github(args.git_user, args.git_pw, args.git_repo, args.proxy)
     if args.command == "stars-geo-tbl":
-        list_stars_per_country(args.cache_file)
+        if args.output_format == "plot":
+            plot_stars_per_country(args.cache_file)
+        else:
+            print_stars_per_country(args.cache_file)
     if args.command == "stars-geo-map":
         create_stars_map(args.cache_file)
     if args.command == "monthly" or args.command == "daily":

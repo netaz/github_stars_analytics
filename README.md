@@ -2,8 +2,18 @@
 
 Get to know a GitHub repository's star-gazers, by using some simple analytics and visualizations of star-gazers data queried from GitHub.
 
-The image below is a geographical snapshot of FastAI's star gazers at the beginning of November, 2018.
+The image below is a geographical snapshot of [FastAI's](https://github.com/fastai/fastai) star gazers at the beginning of November, 2018.
+It was created by executing the following:
+```
+$ python stars_analytics.py query-github --user=<YOUR USER> --password=<YOUR PASSWORD> --repo=https://github.com/fastai/fastai --proxy=https://<YOUR PROXY>:<PORT>
+```
 <center> <img src="imgs/fastai_star_gazers_nov_2018.png"></center>
+
+And here's the same data in a different view:
+```
+$ python3 stars_analytics.py stars-geo-tbl --cache-file=fastai_star_gazers.csv --format=plot
+```
+<center> <img src="imgs/fastai_star_gazers_by_country_nov_2018.png"></center>
 
 Choose any github repository, run a query against GitHub to download the star-gazer records, and perform analytics.
 Currently features:
