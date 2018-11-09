@@ -1,8 +1,9 @@
-# Github Star Gazers Analytics
+# Github Star Gazers Analytics (GSA)
 
 Get to know a GitHub repository's star-gazers, by using some simple analytics and visualizations of star-gazers data queried from GitHub.
 
-<center> <img src="imgs/distiller_star_gazers_nov_2018.png"></center>
+The image below is a geographical snapshot of FastAI's star gazers at the beginning of November, 2018.
+<center> <img src="imgs/fastai_star_gazers_nov_2018.png"></center>
 
 Choose any github repository, run a query against GitHub to download the star-gazer records, and perform analytics.
 Currently features:
@@ -14,7 +15,7 @@ Currently features:
 
 ## Installation
 
-These instructions will help get Distiller up and running on your local machine.
+These instructions will help get GSA up and running on your local machine.
 1. [Clone Star Gazers Analytics](#clone-star-gazers-analytics)
 2. [Create a Python virtual environment](#create-a-python-virtual-environment)
 3. [Install dependencies](#install-dependencies)
@@ -50,7 +51,7 @@ Then create the environment:
 ```
 $ python3 -m venv env
 ```
-As with virtualenv, this creates a directory called ```distiller/env```.<br>
+As with virtualenv, this creates a directory called ```github_stars_analytics/env```.<br>
 
 #### Activate the environment
 The environment activation and deactivation commands for ```venv``` and ```virtualenv``` are the same.<br>
@@ -60,7 +61,7 @@ $ source env/bin/activate
 ```
 
 ### Install dependencies
-Finally, install Distiller's dependency packages using ```pip3```:
+Finally, install GSA's dependency packages using ```pip3```:
 ```
 $ pip3 install -r requirements.txt
 ```
