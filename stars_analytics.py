@@ -12,8 +12,9 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
 
-def query_github(github_user, github_pw, git_repo_url_base, fname="star_gazers.csv"):
+def query_github(github_user, github_pw, git_repo_url_base, https_proxy=None, fname="star_gazers.csv"):
     headers = {'Accept': 'application/vnd.github.v3.star+json'}
+    proxyDict = {"https": https_proxy}
     recs_per_page = 50
     page = 1
     cnt_stars = 0
@@ -24,7 +25,7 @@ def query_github(github_user, github_pw, git_repo_url_base, fname="star_gazers.c
             git_repo_url = git_repo_url_base + "/stargazers?page={}&per_page={}"
             r = requests.get(git_repo_url.format(page, recs_per_page),
                              auth=(github_user, github_pw),
-                             headers=headers)
+                             headers=headers, proxies=proxyDict)
             if not r.ok:
                 print("Done or Error")
                 break
@@ -34,17 +35,17 @@ def query_github(github_user, github_pw, git_repo_url_base, fname="star_gazers.c
                 print("Done")
                 break
             for star in range(nstars):
-                print("-" * 50 + str(cnt_stars+star) + "-" * 50)
+                print("-" * 50 + str(cnt_stars+star) + " (page:" + str(page) + ") " + "-" * 50)
                 print(stars_records[star])
                 user = stars_records[star]['user']
                 login = user['login']
                 starred_at = stars_records[star]['starred_at']
-                starred = datetime.strptime(starred_at, '%Y-%m-%dT%H:%M:%SZ')
+                starred = datetime.datetime.strptime(starred_at, '%Y-%m-%dT%H:%M:%SZ')
                 print(login, starred.year, starred.day, starred.month)
 
                 r = requests.get("https://api.github.com/users/" + login,
                                  auth=(github_user, github_pw),
-                                 headers=headers)
+                                 headers=headers, proxies=proxyDict)
                 if not r.ok:
                     raise ValueError("GET https://api.github.com/users/ failed")
                 user_desc = json.loads(r.text or r.content)
@@ -310,18 +311,25 @@ def create_stars_map(fcache, html_name='stars_map.html'):
     # Make an empty map
     m = folium.Map(location=[20, 0], tiles="Mapbox Bright", zoom_start=2)
 
+    MAX_RADIUS = 3000000
+
     # Add marker one by one on the map
     for country_stats in countries_list:
-        country = country_stats[0]
-        cnt_instances = country_stats[1]["count"]
-        folium.Circle(
-          location=[geo[country][0], geo[country][1]],
-          popup=country + ": " + str(cnt_instances),
-          radius=6000*cnt_instances,
-          color='crimson',
-          fill=True,
-          fill_color='crimson'
-        ).add_to(m)
+        try:
+            country = country_stats[0]
+            cnt_instances = country_stats[1]["count"]
+            folium.Circle(
+              location=[geo[country][0], geo[country][1]],
+              popup="{}: {:.2f}%".format(country, cnt_instances*100/total_matches),
+              radius=MAX_RADIUS * cnt_instances/total_matches,
+              color='crimson',
+              fill=True,
+              fill_color='crimson'
+            ).add_to(m)
+        except KeyError as e:
+            # Misclassification of strings as valid country names can occur,
+            # although they should be very few, if any.
+            print(e)
 
     # Save it as html
     m.save(html_name)
@@ -474,6 +482,7 @@ if __name__ == "__main__":
                         help='path to dataset')
     parser.add_argument("-u", "--user", dest="git_user", help="git user name")
     parser.add_argument("-p", "--password", dest="git_pw", help="git user password")
+    parser.add_argument("-x", "--proxy", dest="proxy", help="HTTPS proxy", default=None)
     parser.add_argument("-r", "--repo",
                         dest="git_repo",
                         help="git repo URL (e.g. https://github.com/NervanaSystems/distiller)")
@@ -486,7 +495,7 @@ if __name__ == "__main__":
                         help="output format: plot|console")
     args = parser.parse_args()
     if args.command == "query-github":
-        query_github(args.git_user, args.git_pw, args.git_repo)
+        query_github(args.git_user, args.git_pw, args.git_repo, args.proxy)
     if args.command == "stars-geo-tbl":
         list_stars_per_country(args.cache_file)
     if args.command == "stars-geo-map":
