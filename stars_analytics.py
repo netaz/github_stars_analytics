@@ -284,10 +284,9 @@ def print_stars_per_country(fcache):
 
 def plot_stars_per_country(fcache):
     df = cached_query_results_df(fcache)
-    plt.figure(figsize=(20,10))
-    #df['% extrapolated'].plot(kind='bar');
+    plt.figure(figsize=(20, 10))
     plt.bar(df['Country'], df['% extrapolated'], width = 1/1.5)
-    #plt.title('New stars activity for ' + start_of_month.strftime("%B/%Y"))
+    plt.title('Stars Per Country (%)')
     plt.xticks(rotation=90)
     plt.ylabel('% Stars');
     plt.show()
@@ -320,7 +319,7 @@ def create_stars_map(fcache, html_name='stars_map.html'):
     countries_list, record_count, total_matches = cached_query_results_summary(fcache)
 
     # Make an empty map
-    m = folium.Map(location=[20, 0], tiles="Mapbox Bright", zoom_start=2)
+    m = folium.Map(location=[20, 0], tiles='Cartodb Positron', zoom_start=3)
 
     MAX_RADIUS = 3000000
 
